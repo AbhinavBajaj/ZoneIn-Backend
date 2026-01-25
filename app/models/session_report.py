@@ -20,6 +20,7 @@ class SessionReport(Base):
     focused_sec: Mapped[float] = mapped_column(Float, nullable=False)
     distracted_sec: Mapped[float] = mapped_column(Float, nullable=False)
     neutral_sec: Mapped[float] = mapped_column(Float, nullable=False)
+    snoozed_sec: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     zone_in_score: Mapped[float] = mapped_column(Float, nullable=False)  # 0–100
     timeline_buckets_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of buckets
     cloud_ai_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
