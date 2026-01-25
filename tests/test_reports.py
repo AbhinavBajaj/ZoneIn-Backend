@@ -101,3 +101,24 @@ def test_auth_isolation(
     assert list_b.status_code == 200
     ids = [x["id"] for x in list_b.json()]
     assert rid not in ids
+
+
+def test_delete_all_reports(
+    client: TestClient,
+    token_a: str,
+    report_payload: dict,
+):
+    """DELETE /reports removes all reports for the current user."""
+    client.post("/reports", json=report_payload, headers={"Authorization": f"Bearer {token_a}"})
+    r = client.delete("/reports", headers={"Authorization": f"Bearer {token_a}"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["deleted"] >= 1
+    list_r = client.get("/reports", headers={"Authorization": f"Bearer {token_a}"})
+    assert list_r.status_code == 200
+    assert len(list_r.json()) == 0
+
+
+def test_delete_all_reports_unauthorized(client: TestClient):
+    r = client.delete("/reports")
+    assert r.status_code == 401

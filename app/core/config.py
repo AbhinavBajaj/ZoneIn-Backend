@@ -9,7 +9,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    database_url: str = "postgresql://localhost:5432/zonein"
+    database_url: str = "sqlite:///./zonein.db"
     google_client_id: str = ""
     google_client_secret: str = ""
     jwt_secret: str = "change-me-in-production"

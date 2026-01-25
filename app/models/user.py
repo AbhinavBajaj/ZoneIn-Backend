@@ -1,8 +1,7 @@
 """User model (Google OAuth)."""
 import uuid
 from datetime import datetime
-from sqlalchemy import String, DateTime
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import String, DateTime, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base

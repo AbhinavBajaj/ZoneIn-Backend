@@ -1,18 +1,21 @@
-"""Session reports API (create, list, get)."""
-from datetime import date, datetime
+"""Session reports API (create, list, get, delete)."""
+import json
+import logging
+from datetime import date, datetime, timedelta, timezone
 from typing import Annotated
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user_id
 from app.core.database import get_db
 from app.models.session_report import SessionReport
-from app.models.user import User
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 
@@ -94,7 +97,10 @@ def create_report(
         existing.cloud_ai_enabled = body.cloud_ai_enabled
         db.commit()
         db.refresh(existing)
-        return _to_out(existing)
+        out = _to_out(existing)
+        logger.info("Report updated: session_id=%s user_id=%s", body.session_id, user_id)
+        logger.info("POST /reports upsert struct: %s", json.dumps(out, default=str))
+        return out
 
     r = SessionReport(
         user_id=user_id,
@@ -112,7 +118,29 @@ def create_report(
     db.add(r)
     db.commit()
     db.refresh(r)
-    return _to_out(r)
+    out = _to_out(r)
+    logger.info("Report created: session_id=%s user_id=%s id=%s", body.session_id, user_id, r.id)
+    logger.info("POST /reports create struct: %s", json.dumps(out, default=str))
+    return out
+
+
+def _parse_date_range(
+    from_date: date | None,
+    to_date: date | None,
+    tz_str: str | None,
+) -> tuple[datetime | None, datetime | None]:
+    """Build UTC datetimes for filtering. If tz_str given, interpret from/to as local dates."""
+    tz = ZoneInfo(tz_str) if tz_str else timezone.utc
+    from_dt: datetime | None = None
+    to_dt: datetime | None = None
+    if from_date is not None:
+        from_dt = datetime(from_date.year, from_date.month, from_date.day, 0, 0, 0, 0, tzinfo=tz)
+        from_dt = from_dt.astimezone(timezone.utc)
+    if to_date is not None:
+        end_next = to_date + timedelta(days=1)
+        to_dt = datetime(end_next.year, end_next.month, end_next.day, 0, 0, 0, 0, tzinfo=tz)
+        to_dt = to_dt.astimezone(timezone.utc)
+    return from_dt, to_dt
 
 
 @router.get("", response_model=list[ReportOut])
@@ -121,15 +149,40 @@ def list_reports(
     db: Annotated[Session, Depends(get_db)],
     from_date: date | None = Query(None, alias="from"),
     to_date: date | None = Query(None, alias="to"),
+    tz: str | None = Query(None, alias="timezone", description="IANA timezone e.g. America/Los_Angeles; from/to are local dates"),
 ):
     q = select(SessionReport).where(SessionReport.user_id == user_id)
-    if from_date is not None:
-        q = q.where(SessionReport.started_at >= datetime.combine(from_date, datetime.min.time()))
-    if to_date is not None:
-        q = q.where(SessionReport.ended_at <= datetime.combine(to_date, datetime.max.time()))
+    from_dt, to_dt = _parse_date_range(from_date, to_date, tz)
+    if from_dt is not None:
+        q = q.where(SessionReport.ended_at >= from_dt)
+    if to_dt is not None:
+        q = q.where(SessionReport.started_at < to_dt)
     q = q.order_by(SessionReport.started_at.desc())
     rows = db.execute(q).scalars().all()
-    return [_to_out(r) for r in rows]
+    out = [_to_out(r) for r in rows]
+    logger.info(
+        "GET /reports from=%s to=%s timezone=%s -> %d reports",
+        from_date,
+        to_date,
+        tz,
+        len(out),
+    )
+    if out:
+        logger.info("GET /reports sample struct: %s", json.dumps(out[0], default=str))
+    return out
+
+
+@router.delete("", response_model=dict)
+def delete_all_reports(
+    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Delete all reports for the current user."""
+    result = db.execute(delete(SessionReport).where(SessionReport.user_id == user_id))
+    db.commit()
+    n = result.rowcount
+    logger.info("DELETE /reports user_id=%s -> %d deleted", user_id, n)
+    return {"deleted": n}
 
 
 @router.get("/{report_id}", response_model=ReportOut)
