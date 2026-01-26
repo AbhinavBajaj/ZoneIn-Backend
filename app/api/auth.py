@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.services.google_oauth import build_authorization_url, fetch_token_and_user, generate_state
 from app.services.oauth_state import check_state, set_state
+from app.services.username import generate_unique_username
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -47,10 +48,15 @@ async def google_callback(
             user.email = email
         if name is not None:
             user.name = name
+        # Generate username if user doesn't have one (for existing users)
+        if not user.username and name:
+            user.username = generate_unique_username(db, name)
         db.commit()
         db.refresh(user)
     else:
-        user = User(google_sub=sub, email=email or "", name=name or "")
+        # Generate username for new user
+        username = generate_unique_username(db, name or "user") if name else generate_unique_username(db, "user")
+        user = User(google_sub=sub, email=email or "", name=name or "", username=username)
         db.add(user)
         db.commit()
         db.refresh(user)

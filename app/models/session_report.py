@@ -24,6 +24,8 @@ class SessionReport(Base):
     zone_in_score: Mapped[float] = mapped_column(Float, nullable=False)  # 0–100
     timeline_buckets_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of buckets
     cloud_ai_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     user: Mapped["User"] = relationship("User", back_populates="reports")
+    reactions: Mapped[list["Reaction"]] = relationship("Reaction", back_populates="report", cascade="all, delete-orphan")

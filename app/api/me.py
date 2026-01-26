@@ -20,9 +20,10 @@ def me(
 ):
     user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
     if not user:
-        return {"id": str(user_id), "email": None, "name": None}
+        return {"id": str(user_id), "email": None, "name": None, "username": None}
     return {
         "id": str(user.id),
         "email": user.email,
         "name": user.name,
+        "username": user.username,
     }

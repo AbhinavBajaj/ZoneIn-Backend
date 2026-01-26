@@ -54,6 +54,7 @@ class ReportOut(BaseModel):
     zone_in_score: float
     timeline_buckets_json: str | None
     cloud_ai_enabled: bool
+    published: bool
     created_at: datetime
 
 
@@ -95,6 +96,7 @@ def _to_out(r: SessionReport, tz_str: str | None = None) -> dict:
         "zone_in_score": r.zone_in_score,
         "timeline_buckets_json": r.timeline_buckets_json,
         "cloud_ai_enabled": r.cloud_ai_enabled,
+        "published": getattr(r, "published", False),  # Backward compatibility
         "created_at": created_at,
     }
 

@@ -46,3 +46,18 @@ def get_current_user_id(
         return UUID(payload.sub)
     except ValueError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+
+def get_optional_user_id(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(Bearer)],
+) -> UUID | None:
+    """Get current user ID if authenticated, otherwise return None."""
+    if not credentials or not credentials.credentials:
+        return None
+    payload = decode_access_token(credentials.credentials)
+    if not payload:
+        return None
+    try:
+        return UUID(payload.sub)
+    except ValueError:
+        return None

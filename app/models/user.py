@@ -14,6 +14,8 @@ class User(Base):
     google_sub: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    username: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     reports: Mapped[list["SessionReport"]] = relationship("SessionReport", back_populates="user")
+    reactions: Mapped[list["Reaction"]] = relationship("Reaction", back_populates="user")
