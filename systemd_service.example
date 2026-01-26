@@ -1,0 +1,24 @@
+# Example systemd service file for ZoneIn Backend
+# Save this as /etc/systemd/system/zonein-backend.service
+# Then run: sudo systemctl daemon-reload && sudo systemctl enable zonein-backend && sudo systemctl start zonein-backend
+
+[Unit]
+Description=ZoneIn Backend API Server
+After=network.target
+
+[Service]
+Type=simple
+User=your-user
+WorkingDirectory=/path/to/ZoneIn-Backend
+Environment="PATH=/path/to/venv/bin"
+Environment="DATABASE_URL=postgresql://user:password@localhost:5432/zonein"
+Environment="GOOGLE_CLIENT_ID=your-client-id"
+Environment="GOOGLE_CLIENT_SECRET=your-client-secret"
+Environment="JWT_SECRET=your-jwt-secret-at-least-32-chars"
+Environment="BASE_URL=https://api.zonein.io"
+ExecStart=/path/to/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
