@@ -12,41 +12,41 @@ if [ ! -f "app/main.py" ]; then
     exit 1
 fi
 
-# Check for required environment variables
-if [ -z "$DATABASE_URL" ]; then
-    echo "⚠️  Warning: DATABASE_URL not set. Using SQLite (not recommended for production)"
-    echo "   Set DATABASE_URL=postgresql://user:password@host:5432/dbname for production"
-fi
+# Default production values (can be overridden by environment variables)
+# These are pre-configured for quick setup - update if needed
+DEFAULT_DATABASE_URL="postgresql://myuser:mypassword@localhost:5432/zonein"
+DEFAULT_GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID:-REPLACE_WITH_YOUR_CLIENT_ID}"
+DEFAULT_GOOGLE_CLIENT_SECRET="${GOOGLE_CLIENT_SECRET:-REPLACE_WITH_YOUR_CLIENT_SECRET}"
+DEFAULT_JWT_SECRET="${JWT_SECRET:-REPLACE_WITH_YOUR_JWT_SECRET}"
+DEFAULT_BASE_URL="http://34.132.57.0:8000"
 
-if [ -z "$GOOGLE_CLIENT_ID" ] || [ -z "$GOOGLE_CLIENT_SECRET" ]; then
-    echo "⚠️  Warning: Google OAuth credentials not set"
-    echo "   Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET"
-fi
+# Use environment variables if set, otherwise use defaults
+DATABASE_URL=${DATABASE_URL:-$DEFAULT_DATABASE_URL}
+GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-$DEFAULT_GOOGLE_CLIENT_ID}
+GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-$DEFAULT_GOOGLE_CLIENT_SECRET}
+JWT_SECRET=${JWT_SECRET:-$DEFAULT_JWT_SECRET}
+BASE_URL=${BASE_URL:-$DEFAULT_BASE_URL}
 
-if [ -z "$JWT_SECRET" ]; then
-    echo "❌ Error: JWT_SECRET must be set for production"
-    exit 1
-fi
-
-if [ -z "$BASE_URL" ]; then
-    echo "⚠️  Warning: BASE_URL not set. Using default http://localhost:8000"
-    echo "   Set BASE_URL=https://api.zonein.io (or your production URL)"
-fi
+echo "📋 Using configuration:"
+echo "   DATABASE_URL: ${DATABASE_URL}"
+echo "   GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}"
+echo "   BASE_URL: ${BASE_URL}"
 
 # Create .env file if it doesn't exist
 if [ ! -f ".env" ]; then
-    echo "📝 Creating .env file from environment variables..."
+    echo "📝 Creating .env file..."
     cat > .env << EOF
 # Production Configuration
-DATABASE_URL=${DATABASE_URL:-sqlite:///./zonein.db}
+DATABASE_URL=${DATABASE_URL}
 GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
 GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
 JWT_SECRET=${JWT_SECRET}
-BASE_URL=${BASE_URL:-http://localhost:8000}
+BASE_URL=${BASE_URL}
 EOF
     echo "✅ .env file created"
 else
     echo "ℹ️  .env file already exists, skipping creation"
+    echo "   Update it manually if needed"
 fi
 
 # Install dependencies

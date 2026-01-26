@@ -15,3 +15,5 @@ htmlcov/
 .mypy_cache/
 test.db
 *.db
+.env.production
+setup_production_with_secrets.sh

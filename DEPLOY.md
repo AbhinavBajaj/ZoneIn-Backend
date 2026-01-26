@@ -8,28 +8,19 @@ You'll need:
 3. **Google OAuth credentials** (Client ID and Secret)
 4. **Domain name** (zonein.io) pointing to your server
 
-## Required Information
+## Production Configuration
 
-Before running the setup, you'll need:
+**Pre-configured values:**
+- **Google Cloud VM IP:** `34.132.57.0`
+- **Database:** `postgresql://myuser:mypassword@localhost:5432/zonein`
+- **Base URL:** `http://34.132.57.0:8000` (update to `https://api.zonein.io` when DNS is ready)
 
-1. **Database Connection String:**
-   ```
-   DATABASE_URL=postgresql://user:password@host:5432/zonein
-   ```
+**Required environment variables (set these on your server):**
+- `GOOGLE_CLIENT_ID` - Your Google OAuth Client ID
+- `GOOGLE_CLIENT_SECRET` - Your Google OAuth Client Secret  
+- `JWT_SECRET` - Your JWT secret (at least 32 characters)
 
-2. **Google OAuth Credentials:**
-   - Client ID: `your-client-id.apps.googleusercontent.com`
-   - Client Secret: `your-client-secret`
-
-3. **JWT Secret:**
-   - A random string at least 32 characters long
-   - Generate with: `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`
-
-4. **Base URL:**
-   - Your production API URL: `https://api.zonein.io` (or your IP/domain)
-
-5. **Google Cloud VM IP:**
-   - The external IP address of your VM instance
+**Note:** If using Cloud SQL instead of local PostgreSQL, update `DATABASE_URL` in the setup script.
 
 ## Deployment Steps
 
@@ -48,19 +39,29 @@ git push origin main
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/ZoneIn-Backend.git
+git clone https://github.com/AbhinavBajaj/ZoneIn-Backend.git
 cd ZoneIn-Backend
 
-# Set environment variables
-export DATABASE_URL="postgresql://user:password@host:5432/zonein"
-export GOOGLE_CLIENT_ID="your-client-id.apps.googleusercontent.com"
-export GOOGLE_CLIENT_SECRET="your-client-secret"
-export JWT_SECRET="your-jwt-secret-here"
-export BASE_URL="https://api.zonein.io"
+# Install PostgreSQL if not already installed
+sudo apt-get update
+sudo apt-get install -y postgresql postgresql-contrib
 
-# Run setup
-chmod +x setup_production.sh
-./setup_production.sh
+# Create database and user
+sudo -u postgres psql << EOF
+CREATE DATABASE zonein;
+CREATE USER myuser WITH PASSWORD 'mypassword';
+GRANT ALL PRIVILEGES ON DATABASE zonein TO myuser;
+ALTER USER myuser CREATEDB;
+\q
+EOF
+
+# Run quick setup (uses pre-configured values)
+chmod +x setup_production_quick.sh
+./setup_production_quick.sh
+
+# OR run manual setup with custom values
+# chmod +x setup_production.sh
+# ./setup_production.sh
 ```
 
 ### 3. Start the Server
