@@ -55,13 +55,16 @@ ALTER USER myuser CREATEDB;
 \q
 EOF
 
-# Run quick setup (uses pre-configured values)
-chmod +x setup_production_quick.sh
-./setup_production_quick.sh
+# Set production secrets as environment variables
+# Get these values from PRODUCTION_SECRETS.txt (not in git) or set them manually:
+export GOOGLE_CLIENT_ID="your-google-client-id"
+export GOOGLE_CLIENT_SECRET="your-google-client-secret"
+export JWT_SECRET="your-jwt-secret"
+export BASE_URL="http://34.132.57.0:8000"
 
-# OR run manual setup with custom values
-# chmod +x setup_production.sh
-# ./setup_production.sh
+# Run setup
+chmod +x setup_production.sh
+./setup_production.sh
 ```
 
 ### 3. Start the Server
