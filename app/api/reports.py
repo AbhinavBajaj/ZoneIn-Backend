@@ -63,10 +63,11 @@ def _update_user_max_score(db: Session, user_id: UUID, new_score: float) -> None
     """Update user's max_zone_in_score if the new score is higher."""
     user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
     if user:
+        old_score = user.max_zone_in_score
         if user.max_zone_in_score is None or new_score > user.max_zone_in_score:
             user.max_zone_in_score = new_score
             db.commit()
-            logger.info("Updated max_zone_in_score for user_id=%s: %s -> %s", user_id, user.max_zone_in_score, new_score)
+            logger.info("Updated max_zone_in_score for user_id=%s: %s -> %s", user_id, old_score, new_score)
 
 
 def _to_out(r: SessionReport, tz_str: str | None = None) -> dict:
