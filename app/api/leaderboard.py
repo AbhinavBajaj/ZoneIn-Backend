@@ -259,3 +259,47 @@ def remove_reaction(
     
     logger.info("Reaction removed: report_id=%s user_id=%s", report_id, user_id)
     return {"removed": True}
+
+
+class LifetimeLeaderboardEntry(BaseModel):
+    model_config = {"from_attributes": True}
+
+    user_id: str
+    user_name: str | None
+    user_email: str | None
+    username: str | None
+    max_zone_in_score: float | None
+    is_own_profile: bool  # Whether this is the current user's profile
+
+
+@router.get("/lifetime", response_model=list[LifetimeLeaderboardEntry])
+def get_lifetime_leaderboard(
+    user_id: Annotated[UUID | None, Depends(get_optional_user_id)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Get leaderboard of users sorted by their lifetime maximum ZoneIn score. Works without authentication."""
+    # Get all users with max_zone_in_score, ordered by max_zone_in_score descending
+    query = (
+        select(User)
+        .where(User.max_zone_in_score.isnot(None))
+        .order_by(User.max_zone_in_score.desc(), User.created_at.asc())
+    )
+    
+    users = db.execute(query).scalars().all()
+    
+    # Build response
+    entries = []
+    for user in users:
+        is_own_profile = user_id is not None and user.id == user_id
+        
+        entries.append(LifetimeLeaderboardEntry(
+            user_id=str(user.id),
+            user_name=user.name,
+            user_email=user.email,
+            username=user.username,
+            max_zone_in_score=user.max_zone_in_score,
+            is_own_profile=is_own_profile,
+        ))
+    
+    logger.info("GET /leaderboard/lifetime -> %d entries", len(entries))
+    return entries

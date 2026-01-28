@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_user_id
 from app.core.database import get_db
 from app.models.session_report import SessionReport
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -56,6 +57,16 @@ class ReportOut(BaseModel):
     cloud_ai_enabled: bool
     published: bool
     created_at: datetime
+
+
+def _update_user_max_score(db: Session, user_id: UUID, new_score: float) -> None:
+    """Update user's max_zone_in_score if the new score is higher."""
+    user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+    if user:
+        if user.max_zone_in_score is None or new_score > user.max_zone_in_score:
+            user.max_zone_in_score = new_score
+            db.commit()
+            logger.info("Updated max_zone_in_score for user_id=%s: %s -> %s", user_id, user.max_zone_in_score, new_score)
 
 
 def _to_out(r: SessionReport, tz_str: str | None = None) -> dict:
@@ -144,6 +155,8 @@ def create_report(
         existing.cloud_ai_enabled = body.cloud_ai_enabled
         db.commit()
         db.refresh(existing)
+        # Update user's max_zone_in_score
+        _update_user_max_score(db, user_id, body.zone_in_score)
         out = _to_out(existing, tz)
         logger.info("Report updated: session_id=%s user_id=%s", body.session_id, user_id)
         logger.info("POST /reports upsert struct: %s", json.dumps(out, default=str))
@@ -166,6 +179,8 @@ def create_report(
     db.add(r)
     db.commit()
     db.refresh(r)
+    # Update user's max_zone_in_score
+    _update_user_max_score(db, user_id, body.zone_in_score)
     out = _to_out(r, tz)
     logger.info("Report created: session_id=%s user_id=%s id=%s", body.session_id, user_id, r.id)
     logger.info("POST /reports create struct: %s", json.dumps(out, default=str))
