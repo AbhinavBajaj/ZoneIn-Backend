@@ -98,7 +98,7 @@ Send `started_at` and `ended_at` in the **user’s local timezone** (with offset
 }
 ```
 
-- `timeline_buckets_json`: JSON array of `{ bucket_start_ts, bucket_duration_sec, state }` with `state` one of `"focused"` | `"distracted"` | `"neutral"`. No URLs, app names, or raw events.
+- `timeline_buckets_json`: JSON array of **flat events** (one per app switch or Chrome/tab event). Each event: `{ start_ts, end_ts, kind ("browser"|"app"), label, classification, state, url? (browser), bundle_id? (app) }`. No nesting; old segment/activities format is not supported.
 - Reports are upserted by `(userId, sessionId)`.
 
 ## Tests

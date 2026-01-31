@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_user_id
+from app.core.auth import get_current_user_id, get_optional_user_id
 from app.core.database import get_db
 from app.models.session_report import SessionReport
 from app.models.user import User
@@ -57,6 +57,7 @@ class ReportOut(BaseModel):
     cloud_ai_enabled: bool
     published: bool
     created_at: datetime
+    is_own_report: bool = True
 
 
 def _update_user_max_score(db: Session, user_id: UUID, new_score: float) -> None:
@@ -250,16 +251,16 @@ def delete_all_reports(
 @router.get("/{report_id}", response_model=ReportOut)
 def get_report(
     report_id: UUID,
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    user_id: Annotated[UUID | None, Depends(get_optional_user_id)],
     db: Annotated[Session, Depends(get_db)],
     tz: str | None = Query(None, alias="timezone", description="IANA timezone e.g. America/New_York; convert response datetimes to this timezone"),
 ):
-    r = db.execute(
-        select(SessionReport).where(
-            SessionReport.id == report_id,
-            SessionReport.user_id == user_id,
-        )
-    ).scalar_one_or_none()
+    r = db.execute(select(SessionReport).where(SessionReport.id == report_id)).scalar_one_or_none()
     if not r:
         raise HTTPException(status_code=404, detail="Report not found")
-    return _to_out(r, tz)
+    # Published reports: anyone can view (with or without sign-in). Unpublished: only owner.
+    if not r.published:
+        if user_id is None or r.user_id != user_id:
+            raise HTTPException(status_code=404, detail="Report not found")
+    is_own = user_id is not None and r.user_id == user_id
+    return ReportOut(**_to_out(r, tz), is_own_report=is_own)
