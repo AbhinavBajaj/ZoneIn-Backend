@@ -60,6 +60,80 @@ class ReportOut(BaseModel):
     is_own_report: bool = True
 
 
+# Bundle ID / label for Chrome app (macOS); if this app event is followed by a browser event,
+# we assume the Chrome event was a missed tab and override it with the next browser event.
+CHROME_APP_BUNDLE_ID = "com.google.Chrome"
+CHROME_APP_LABEL = "Google Chrome"
+
+
+def _is_chrome_app_event(ev: dict) -> bool:
+    kind = ev.get("kind") or ""
+    bundle = ev.get("bundle_id") or ""
+    label = ev.get("label") or ""
+    return (
+        kind == "app"
+        and (bundle == CHROME_APP_BUNDLE_ID or label == CHROME_APP_LABEL)
+    )
+
+
+def _is_browser_event_with_url(ev: dict) -> bool:
+    kind = ev.get("kind") or ""
+    return kind == "browser" and (ev.get("url") is not None or ev.get("label") is not None)
+
+
+def _override_chrome_with_browser(chrome_ev: dict, browser_ev: dict) -> None:
+    """Overwrite Chrome app event with browser event's url, label, classification."""
+    chrome_ev["kind"] = "browser"
+    chrome_ev["classification"] = browser_ev.get("classification") if browser_ev.get("classification") is not None else "neutral"
+    chrome_ev["label"] = browser_ev.get("label") if browser_ev.get("label") is not None else chrome_ev.get("label", "")
+    chrome_ev["url"] = browser_ev.get("url")
+    if "bundle_id" in chrome_ev:
+        del chrome_ev["bundle_id"]
+
+
+def _normalize_timeline_chrome_override(timeline_buckets_json: str | None) -> str | None:
+    """
+    If a Google Chrome app event is immediately before or after a browser event (with url),
+    override the Chrome event with that browser event's classification, url, and label
+    (user was on that page; the extension event was delayed or missed when switching).
+    """
+    if not timeline_buckets_json or not timeline_buckets_json.strip():
+        return timeline_buckets_json
+    try:
+        events = json.loads(timeline_buckets_json)
+    except (json.JSONDecodeError, TypeError):
+        return timeline_buckets_json
+    if not isinstance(events, list) or len(events) < 2:
+        return timeline_buckets_json
+    modified = False
+    for i in range(len(events) - 1):
+        prev = events[i]
+        curr = events[i + 1]
+        if not isinstance(prev, dict) or not isinstance(curr, dict):
+            continue
+        # Case 1: prev = Chrome app, curr = browser with url -> override prev with curr
+        if _is_chrome_app_event(prev) and _is_browser_event_with_url(curr):
+            _override_chrome_with_browser(prev, curr)
+            modified = True
+            logger.debug(
+                "Overrode Chrome app (prev) with next browser event: label=%s url=%s",
+                prev.get("label"),
+                prev.get("url"),
+            )
+        # Case 2: prev = browser with url, curr = Chrome app -> override curr with prev
+        elif _is_browser_event_with_url(prev) and _is_chrome_app_event(curr):
+            _override_chrome_with_browser(curr, prev)
+            modified = True
+            logger.debug(
+                "Overrode Chrome app (curr) with prev browser event: label=%s url=%s",
+                curr.get("label"),
+                curr.get("url"),
+            )
+    if not modified:
+        return timeline_buckets_json
+    return json.dumps(events)
+
+
 def _update_user_max_score(db: Session, user_id: UUID, new_score: float) -> None:
     """Update user's max_zone_in_score if the new score is higher."""
     user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
@@ -144,6 +218,8 @@ def create_report(
         )
     ).scalar_one_or_none()
 
+    timeline_json = _normalize_timeline_chrome_override(body.timeline_buckets_json) or body.timeline_buckets_json
+
     if existing:
         existing.started_at = started_at
         existing.ended_at = ended_at
@@ -153,7 +229,7 @@ def create_report(
         existing.neutral_sec = body.neutral_sec
         existing.snoozed_sec = body.snoozed_sec
         existing.zone_in_score = body.zone_in_score
-        existing.timeline_buckets_json = body.timeline_buckets_json
+        existing.timeline_buckets_json = timeline_json
         existing.cloud_ai_enabled = body.cloud_ai_enabled
         db.commit()
         db.refresh(existing)
@@ -175,7 +251,7 @@ def create_report(
         neutral_sec=body.neutral_sec,
         snoozed_sec=body.snoozed_sec,
         zone_in_score=body.zone_in_score,
-        timeline_buckets_json=body.timeline_buckets_json,
+        timeline_buckets_json=timeline_json,
         cloud_ai_enabled=body.cloud_ai_enabled,
     )
     db.add(r)
