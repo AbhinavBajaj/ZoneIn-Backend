@@ -20,9 +20,11 @@ class TokenPayload(BaseModel):
     exp: datetime | None = None
 
 
-def create_access_token(user_id: UUID) -> str:
+def create_access_token(user_id: UUID, email: str | None = None) -> str:
     expire = datetime.utcnow() + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
     payload = {"sub": str(user_id), "exp": expire}
+    if email:
+        payload["email"] = email
     return jwt.encode(payload, settings.jwt_secret, algorithm=ALGORITHM)
 
 

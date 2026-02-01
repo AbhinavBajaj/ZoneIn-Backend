@@ -61,7 +61,7 @@ async def google_callback(
         db.commit()
         db.refresh(user)
 
-    token = create_access_token(user.id)
+    token = create_access_token(user.id, email=user.email)
     ui_base = redirect_ui_stored or request.query_params.get("redirect_ui", "http://localhost:5000")
     return RedirectResponse(url=f"{ui_base.rstrip('/')}/signin?token={token}")
 
