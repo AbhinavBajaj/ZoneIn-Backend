@@ -68,7 +68,6 @@ Or: `python run.py` (runs uvicorn on port 8000).
 | GET | `/me` | Bearer | Current user (id, email, name) |
 | POST | `/reports` | Bearer | Create or upsert report (by `userId` + `sessionId`) |
 | GET | `/reports?from=YYYY-MM-DD&to=YYYY-MM-DD&timezone=America/Los_Angeles` | Bearer | List reports in date range; `timezone` (IANA) interprets `from`/`to` as local dates |
-| DELETE | `/reports` | Bearer | Delete all reports for the current user |
 | GET | `/reports/{id}` | Bearer | Get report by id |
 
 **Auth:** `Authorization: Bearer <jwt>`.
@@ -107,7 +106,7 @@ Send `started_at` and `ended_at` in the **user’s local timezone** (with offset
 pytest tests/ -v
 ```
 
-Uses SQLite for tests. Covers: health, auth redirect/callback (mocked), POST create/upsert, GET list/by-id, DELETE all reports, auth isolation (user cannot read others’ reports).
+Uses SQLite for tests. Covers: health, auth redirect/callback (mocked), POST create/upsert, GET list/by-id, auth isolation (user cannot read others’ reports).
 
 ## Deployment (Render / Fly / Railway)
 
@@ -121,6 +120,33 @@ Uses SQLite for tests. Covers: health, auth redirect/callback (mocked), POST cre
 ## Data model (summary)
 
 - **users**: `id`, `google_sub` (unique), `email`, `name`, `created_at`
-- **session_reports**: `id`, `user_id`, `session_id`, `started_at`, `ended_at`, `duration_sec`, `focused_sec`, `distracted_sec`, `neutral_sec`, `zone_in_score`, `timeline_buckets_json`, `cloud_ai_enabled`, `created_at`. Unique on `(user_id, session_id)`.
+- **session_reports**: `id`, `user_id`, `session_id`, `started_at`, `ended_at`, `duration_sec`, `focused_sec`, `distracted_sec`, `neutral_sec`, `snoozed_sec`, `zone_in_score`, `focus_percentage`, `timeline_buckets_json`, `half_focused_segments_json`, `cloud_ai_enabled`, `created_at`. Unique on `(user_id, session_id)`.
+
+**Where Chrome / browser URLs live:** In `session_reports.timeline_buckets_json`. That column is a JSON array of flat events; each event has `start_ts`, `end_ts`, `kind` (`"browser"` or `"app"`), `label`, `classification`, `state`, and optionally `url` (for browser tabs). There is no separate “websites” table; all event data for the report is in this JSON.
+
+**Inspecting the latest report (timeline + Chrome URLs + segments):**
+
+The backend DB is **not** the same as the macOS app’s DB. Use the **ZoneIn-Backend** repo and its DB (e.g. `ZoneIn-Backend/zonein.db` for SQLite).
+
+1. **Create tables if needed** (from `ZoneIn-Backend`):
+   ```bash
+   cd /path/to/ZoneIn-Backend
+   alembic upgrade head
+   ```
+2. **List events (Chrome + app) with Python** (uses same DB as backend):
+   ```bash
+   cd /path/to/ZoneIn-Backend
+   python inspect_latest_report.py
+   ```
+3. **Raw SQLite** (must run from `ZoneIn-Backend` so `zonein.db` is the backend’s file):
+   ```bash
+   cd /path/to/ZoneIn-Backend
+   sqlite3 zonein.db "SELECT timeline_buckets_json FROM session_reports ORDER BY ended_at DESC LIMIT 1;" | jq .
+   ```
+   Or list each event:
+   ```bash
+   sqlite3 zonein.db "SELECT json_extract(value,'$.kind') AS kind, json_extract(value,'$.label') AS label, json_extract(value,'$.state') AS state, json_extract(value,'$.url') AS url FROM session_reports, json_each(timeline_buckets_json) WHERE session_reports.id=(SELECT id FROM session_reports ORDER BY ended_at DESC LIMIT 1) ORDER BY json_extract(value,'$.start_ts');"
+   ```
+   If you run `sqlite3 zonein.db` from the **ZoneIn** (macOS app) repo, you’ll hit the app’s local DB, which has no `session_reports` table.
 
 No analytics, no raw behavior data, no per-event API calls.

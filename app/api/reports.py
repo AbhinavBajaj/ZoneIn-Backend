@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user_id, get_optional_user_id
@@ -36,7 +36,9 @@ class ReportCreate(BaseModel):
     neutral_sec: float = Field(..., ge=0)
     snoozed_sec: float = Field(0, ge=0)  # Optional, defaults to 0 for backward compatibility
     zone_in_score: float = Field(..., ge=0, le=100)
+    focus_percentage: float | None = Field(None, ge=0, le=100)  # From app; FE uses this instead of recomputing
     timeline_buckets_json: str | None = None  # JSON array of TimelineBucket
+    half_focused_segments_json: str | None = None  # JSON array of { start_ts, end_ts, apps_display }
     cloud_ai_enabled: bool = False
 
 
@@ -53,7 +55,9 @@ class ReportOut(BaseModel):
     neutral_sec: float
     snoozed_sec: float
     zone_in_score: float
+    focus_percentage: float | None = None
     timeline_buckets_json: str | None
+    half_focused_segments_json: str | None = None
     cloud_ai_enabled: bool
     published: bool
     created_at: datetime
@@ -181,7 +185,9 @@ def _to_out(r: SessionReport, tz_str: str | None = None) -> dict:
         "neutral_sec": r.neutral_sec,
         "snoozed_sec": getattr(r, "snoozed_sec", 0.0),  # Backward compatibility
         "zone_in_score": r.zone_in_score,
+        "focus_percentage": getattr(r, "focus_percentage", None),
         "timeline_buckets_json": r.timeline_buckets_json,
+        "half_focused_segments_json": getattr(r, "half_focused_segments_json", None),
         "cloud_ai_enabled": r.cloud_ai_enabled,
         "published": getattr(r, "published", False),  # Backward compatibility
         "created_at": created_at,
@@ -229,7 +235,9 @@ def create_report(
         existing.neutral_sec = body.neutral_sec
         existing.snoozed_sec = body.snoozed_sec
         existing.zone_in_score = body.zone_in_score
+        existing.focus_percentage = body.focus_percentage
         existing.timeline_buckets_json = timeline_json
+        existing.half_focused_segments_json = body.half_focused_segments_json
         existing.cloud_ai_enabled = body.cloud_ai_enabled
         db.commit()
         db.refresh(existing)
@@ -251,7 +259,9 @@ def create_report(
         neutral_sec=body.neutral_sec,
         snoozed_sec=body.snoozed_sec,
         zone_in_score=body.zone_in_score,
+        focus_percentage=body.focus_percentage,
         timeline_buckets_json=timeline_json,
+        half_focused_segments_json=body.half_focused_segments_json,
         cloud_ai_enabled=body.cloud_ai_enabled,
     )
     db.add(r)
@@ -309,19 +319,6 @@ def list_reports(
         len(out),
     )
     return out
-
-
-@router.delete("", response_model=dict)
-def delete_all_reports(
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
-    db: Annotated[Session, Depends(get_db)],
-):
-    """Delete all reports for the current user."""
-    result = db.execute(delete(SessionReport).where(SessionReport.user_id == user_id))
-    db.commit()
-    n = result.rowcount
-    logger.info("DELETE /reports user_id=%s -> %d deleted", user_id, n)
-    return {"deleted": n}
 
 
 @router.get("/{report_id}", response_model=ReportOut)

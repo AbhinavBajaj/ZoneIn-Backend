@@ -22,7 +22,9 @@ class SessionReport(Base):
     neutral_sec: Mapped[float] = mapped_column(Float, nullable=False)
     snoozed_sec: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     zone_in_score: Mapped[float] = mapped_column(Float, nullable=False)  # 0–100
+    focus_percentage: Mapped[float | None] = mapped_column(Float, nullable=True)  # 0–100, from app (FE uses this)
     timeline_buckets_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of buckets
+    half_focused_segments_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of { start_ts, end_ts, apps_display }
     cloud_ai_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
