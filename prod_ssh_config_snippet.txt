@@ -1,0 +1,14 @@
+# Append this block to your ~/.ssh/config to connect to prod (theloveguru)
+# Example: cat prod_ssh_config_snippet.txt >> ~/.ssh/config
+
+Host theloveguru
+  HostName 34.132.57.0
+  User abhinav_bajaj2023
+  IdentityFile ~/.ssh/google_compute_engine
+  ForwardX11 yes
+  ForwardX11Trusted yes
+  ForwardAgent yes
+  Compression yes
+  ServerAliveInterval 60
+  ServerAliveCountMax 10
+  ConnectTimeout 20
