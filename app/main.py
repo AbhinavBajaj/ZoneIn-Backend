@@ -16,7 +16,7 @@ app = FastAPI(title="ZoneIn Backend", description="Aggregated focus session repo
 
 @app.middleware("http")
 async def log_every_request(request: Request, call_next: Callable):
-    """Log every request to stdout so we always see when POST /reports hits the server."""
+    """Log every request to stdout."""
     client = request.client.host if request.client else "?"
     method = request.method
     path = request.url.path
@@ -34,6 +34,8 @@ cors_origins = [
     "http://127.0.0.1:5000",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
     "https://zonein.io",
     "https://www.zonein.io",
 ]
