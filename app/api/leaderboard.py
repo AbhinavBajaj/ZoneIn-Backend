@@ -10,6 +10,7 @@ from sqlalchemy import select, func, nulls_last
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user_id, get_optional_user_id
+from app.core.avatar import default_avatar_url_for_user
 from app.core.database import get_db
 from app.models.session_report import SessionReport
 from app.models.reaction import Reaction
@@ -319,7 +320,7 @@ def get_lifetime_leaderboard(
             user_name=user.name,
             user_email=user.email,
             username=user.username,
-            avatar_url=getattr(user, "avatar_url", None),
+            avatar_url=getattr(user, "avatar_url", None) or default_avatar_url_for_user(user.id),
             max_zone_in_score=user.max_zone_in_score,
             total_focused_sec=total_sec,
             is_own_profile=is_own_profile,
