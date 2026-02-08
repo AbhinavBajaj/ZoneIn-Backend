@@ -30,46 +30,52 @@ if _env_file.exists():
                     os.environ["DATABASE_URL"] = value
                     break
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from app.core.database import SessionLocal
 from app.models.user import User
 from app.services.username import name_to_base
 
 
+# Only select columns that exist in all environments (prod may not have
+# max_zone_in_score, total_focused_sec yet).
+_USER_COLS = [User.id, User.google_sub, User.email, User.name, User.username, User.created_at]
+
+
 def migrate_usernames(dry_run: bool = False):
     db = SessionLocal()
     try:
-        users = db.execute(
-            select(User).order_by(User.created_at.asc())
-        ).scalars().all()
+        rows = db.execute(
+            select(*_USER_COLS).order_by(User.created_at.asc())
+        ).all()
 
         # Per base (firstname_lastname), assign N in created_at order
         next_n: dict[str, int] = defaultdict(lambda: 1)
-        updates: list[tuple[User, str]] = []
+        updates: list[tuple] = []  # (user_id, email_or_sub, old_username, new_username)
 
-        for user in users:
-            name_to_use = user.name or (user.email.split("@")[0] if user.email else "user")
+        for row in rows:
+            user_id, google_sub, email, name, username, _created_at = row
+            name_to_use = name or (email.split("@")[0] if email else "user")
             base = name_to_base(name_to_use)
             n = next_n[base]
             next_n[base] += 1
             new_username = f"{base}_{n}"
-            if user.username != new_username:
-                updates.append((user, new_username))
+            if username != new_username:
+                updates.append((user_id, email or google_sub, username, new_username))
 
         if not updates:
             print("No usernames to update.")
             return
 
         print(f"Will update {len(updates)} user(s) to new format (firstname_lastname_N):")
-        for user, new_username in updates:
-            print(f"  {user.email or user.google_sub}: {user.username or '(null)'} -> {new_username}")
+        for user_id, email_or_sub, old_username, new_username in updates:
+            print(f"  {email_or_sub}: {old_username or '(null)'} -> {new_username}")
 
         if dry_run:
             print("\n[DRY RUN] No changes written. Run without --dry-run to apply.")
             return
 
-        for user, new_username in updates:
-            user.username = new_username
+        for user_id, _e, _old, new_username in updates:
+            db.execute(update(User).where(User.id == user_id).values(username=new_username))
         db.commit()
         print(f"\nSuccessfully updated {len(updates)} username(s).")
     except Exception as e:
