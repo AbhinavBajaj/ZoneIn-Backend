@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 
-from app.api import auth, health, me, reports, leaderboard
+from app.api import auth, health, me, profile, reports, leaderboard
 
 logging.getLogger("app").setLevel(logging.INFO)
 
@@ -51,5 +51,6 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(me.router)
+app.include_router(profile.router)
 app.include_router(reports.router)
 app.include_router(leaderboard.router)
