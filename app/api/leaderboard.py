@@ -174,12 +174,13 @@ def get_leaderboard(
         
         report_dict = _to_out(report, tz)
         top_focus_app = _top_focus_app_from_segments(getattr(report, "half_focused_segments_json", None))
+        effective_avatar = avatar_url or default_avatar_url_for_user(report.user_id)
         entries.append(LeaderboardEntry(
             **report_dict,
             user_name=user_name,
             user_email=user_email,
             username=username,
-            avatar_url=avatar_url,
+            avatar_url=effective_avatar,
             is_own_report=is_own_report,
             reactions=reaction_counts,
             user_reaction=user_reaction,

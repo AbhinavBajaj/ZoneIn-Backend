@@ -1,4 +1,5 @@
 """Google OAuth login + callback, JWT issuance."""
+import random
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -7,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.auth import create_access_token
+from app.core.avatar import DEFAULT_AVATAR_COUNT
 from app.core.database import get_db
 from app.models.user import User
 from app.services.google_oauth import build_authorization_url, fetch_token_and_user, generate_state
@@ -56,7 +58,10 @@ async def google_callback(
     else:
         # Generate username for new user
         username = generate_unique_username(db, name or "user") if name else generate_unique_username(db, "user")
-        user = User(google_sub=sub, email=email or "", name=name or "", username=username)
+        # Assign a random default avatar for new users
+        avatar_index = random.randint(1, DEFAULT_AVATAR_COUNT)
+        default_avatar_url = f"/avatars/monkey-{avatar_index}.png"
+        user = User(google_sub=sub, email=email or "", name=name or "", username=username, avatar_url=default_avatar_url)
         db.add(user)
         db.commit()
         db.refresh(user)
