@@ -118,14 +118,19 @@ def get_leaderboard(
     user_id: Annotated[UUID | None, Depends(get_optional_user_id)],
     db: Annotated[Session, Depends(get_db)],
     tz: str | None = Query(None, alias="timezone", description="IANA timezone e.g. America/New_York"),
+    sort: str = Query("focus", description="Sort order: 'focus' = highest focus time first (leaderboard), 'recent' = most recent posted first (published reports)"),
 ):
-    """Get leaderboard of published reports, sorted by most recent posted (created_at desc). Works without authentication."""
-    # Get all published reports with user info, ordered by most recent first
+    """Get published reports. sort=focus (default) = by focused_sec desc; sort=recent = by created_at desc. Works without authentication."""
+    order_by = (
+        SessionReport.created_at.desc()
+        if sort == "recent"
+        else (SessionReport.focused_sec.desc(), SessionReport.created_at.desc())
+    )
     query = (
         select(SessionReport, User.name, User.email, User.username)
         .join(User, SessionReport.user_id == User.id)
         .where(SessionReport.published == True)
-        .order_by(SessionReport.created_at.desc())
+        .order_by(*order_by if isinstance(order_by, tuple) else (order_by,))
     )
     
     results = db.execute(query).all()
