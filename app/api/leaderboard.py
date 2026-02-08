@@ -119,26 +119,40 @@ def unpublish_report(
     return {"published": False}
 
 
-@router.get("", response_model=list[LeaderboardEntry])
+class LeaderboardPaginatedResponse(BaseModel):
+    items: list[LeaderboardEntry]
+    total: int
+    page: int
+    per_page: int
+
+
+@router.get("", response_model=LeaderboardPaginatedResponse)
 def get_leaderboard(
     user_id: Annotated[UUID | None, Depends(get_optional_user_id)],
     db: Annotated[Session, Depends(get_db)],
     tz: str | None = Query(None, alias="timezone", description="IANA timezone e.g. America/New_York"),
     sort: str = Query("focus", description="Sort order: 'focus' = highest focus time first (leaderboard), 'recent' = most recent posted first (published reports)"),
+    page: int = Query(1, ge=1, description="Page number (1-based)"),
+    limit: int = Query(15, ge=1, le=100, description="Reports per page (max 15 for published reports)"),
 ):
-    """Get published reports. sort=focus (default) = by focused_sec desc; sort=recent = by published_at desc (when you published). Works without authentication."""
+    """Get published reports with pagination. sort=focus (default) = by focused_sec desc; sort=recent = by published_at desc. Works without authentication."""
     order_by = (
         nulls_last(SessionReport.published_at.desc())
         if sort == "recent"
         else (SessionReport.focused_sec.desc(), SessionReport.created_at.desc())
     )
-    query = (
+    base_query = (
         select(SessionReport, User.name, User.email, User.username, User.avatar_url)
         .join(User, SessionReport.user_id == User.id)
         .where(SessionReport.published == True)
         .order_by(*order_by if isinstance(order_by, tuple) else (order_by,))
     )
-    
+    # Total count (same filter as base_query, no join needed for count)
+    total = db.execute(
+        select(func.count(SessionReport.id)).where(SessionReport.published == True)
+    ).scalar_one()
+    # Paginate
+    query = base_query.limit(limit).offset((page - 1) * limit)
     results = db.execute(query).all()
     
     # Get all reactions for these reports
@@ -188,8 +202,8 @@ def get_leaderboard(
             top_focus_app=top_focus_app,
         ))
     
-    logger.info("GET /leaderboard -> %d entries", len(entries))
-    return entries
+    logger.info("GET /leaderboard -> page=%d limit=%d total=%d entries=%d", page, limit, total, len(entries))
+    return LeaderboardPaginatedResponse(items=entries, total=total, page=page, per_page=limit)
 
 
 @router.post("/reports/{report_id}/react", response_model=ReactResponse)
