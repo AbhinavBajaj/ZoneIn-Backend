@@ -82,7 +82,9 @@ def publish_report(
         raise HTTPException(status_code=404, detail="Report not found")
     
     report.published = True
-    report.published_at = datetime.now(timezone.utc)
+    # Keep original published_at on republish so feed order is preserved
+    if report.published_at is None:
+        report.published_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(report)
     
@@ -129,7 +131,7 @@ def get_leaderboard(
         else (SessionReport.focused_sec.desc(), SessionReport.created_at.desc())
     )
     query = (
-        select(SessionReport, User.name, User.email, User.username)
+        select(SessionReport, User.name, User.email, User.username, User.avatar_url)
         .join(User, SessionReport.user_id == User.id)
         .where(SessionReport.published == True)
         .order_by(*order_by if isinstance(order_by, tuple) else (order_by,))
@@ -176,6 +178,7 @@ def get_leaderboard(
             user_name=user_name,
             user_email=user_email,
             username=username,
+            avatar_url=avatar_url,
             is_own_report=is_own_report,
             reactions=reaction_counts,
             user_reaction=user_reaction,
@@ -316,6 +319,7 @@ def get_lifetime_leaderboard(
             user_name=user.name,
             user_email=user.email,
             username=user.username,
+            avatar_url=getattr(user, "avatar_url", None),
             max_zone_in_score=user.max_zone_in_score,
             total_focused_sec=total_sec,
             is_own_profile=is_own_profile,
