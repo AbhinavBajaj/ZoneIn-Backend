@@ -119,13 +119,13 @@ def get_leaderboard(
     db: Annotated[Session, Depends(get_db)],
     tz: str | None = Query(None, alias="timezone", description="IANA timezone e.g. America/New_York"),
 ):
-    """Get leaderboard of published reports, sorted by focused_sec descending. Works without authentication."""
-    # Get all published reports with user info, ordered by focused time descending
+    """Get leaderboard of published reports, sorted by most recent posted (created_at desc). Works without authentication."""
+    # Get all published reports with user info, ordered by most recent first
     query = (
         select(SessionReport, User.name, User.email, User.username)
         .join(User, SessionReport.user_id == User.id)
         .where(SessionReport.published == True)
-        .order_by(SessionReport.focused_sec.desc(), SessionReport.created_at.desc())
+        .order_by(SessionReport.created_at.desc())
     )
     
     results = db.execute(query).all()
