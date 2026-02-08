@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func
+from sqlalchemy import select, func, nulls_last
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user_id, get_optional_user_id
@@ -41,6 +41,7 @@ class LeaderboardEntry(BaseModel):
     cloud_ai_enabled: bool
     created_at: datetime
     published: bool
+    published_at: datetime | None = None  # When report was published (feed sort)
     user_name: str | None
     user_email: str | None
     username: str | None
@@ -81,6 +82,7 @@ def publish_report(
         raise HTTPException(status_code=404, detail="Report not found")
     
     report.published = True
+    report.published_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(report)
     
@@ -120,9 +122,9 @@ def get_leaderboard(
     tz: str | None = Query(None, alias="timezone", description="IANA timezone e.g. America/New_York"),
     sort: str = Query("focus", description="Sort order: 'focus' = highest focus time first (leaderboard), 'recent' = most recent posted first (published reports)"),
 ):
-    """Get published reports. sort=focus (default) = by focused_sec desc; sort=recent = by created_at desc. Works without authentication."""
+    """Get published reports. sort=focus (default) = by focused_sec desc; sort=recent = by published_at desc (when you published). Works without authentication."""
     order_by = (
-        SessionReport.created_at.desc()
+        nulls_last(SessionReport.published_at.desc())
         if sort == "recent"
         else (SessionReport.focused_sec.desc(), SessionReport.created_at.desc())
     )

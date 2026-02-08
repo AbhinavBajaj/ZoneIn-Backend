@@ -206,6 +206,7 @@ def _to_out(r: SessionReport, tz_str: str | None = None) -> dict:
         "half_focused_segments_json": getattr(r, "half_focused_segments_json", None),
         "cloud_ai_enabled": r.cloud_ai_enabled,
         "published": getattr(r, "published", False),  # Backward compatibility
+        "published_at": getattr(r, "published_at", None),  # When report was published
         "activity_public": getattr(r, "activity_public", False),
         "created_at": created_at,
     }
