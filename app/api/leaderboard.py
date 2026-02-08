@@ -155,7 +155,7 @@ def get_leaderboard(
     
     # Build response
     entries = []
-    for report, user_name, user_email, username in results:
+    for report, user_name, user_email, username, avatar_url in results:
         # Check if this is the current user's report (only if authenticated)
         is_own_report = user_id is not None and report.user_id == user_id
         
