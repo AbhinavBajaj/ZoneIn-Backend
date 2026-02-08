@@ -46,6 +46,7 @@ class LeaderboardEntry(BaseModel):
     user_name: str | None
     user_email: str | None
     username: str | None
+    avatar_url: str | None = None  # Profile picture URL (or default)
     is_own_report: bool  # Whether this report belongs to the current user
     reactions: dict[str, int]  # emoji -> count
     user_reaction: str | None  # emoji that current user reacted with, if any
