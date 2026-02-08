@@ -16,6 +16,7 @@ class User(Base):
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     username: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
     max_zone_in_score: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    total_focused_sec: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)  # Sum of focused_sec across all reports
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     reports: Mapped[list["SessionReport"]] = relationship("SessionReport", back_populates="user")

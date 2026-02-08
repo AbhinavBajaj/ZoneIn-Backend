@@ -1,44 +1,65 @@
-"""Username generation utilities."""
-import secrets
-import string
+"""Username generation utilities.
+
+Format: firstname_lastname_N (e.g. abhinav_bajaj_1, mary_nasimova_1).
+N is assigned chronologically by the backend so the first user with that
+first+last name gets _1, the next _2, etc. No conflicts.
+"""
+import re
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.user import User
 
 
-def extract_first_name(name: str | None) -> str:
-    """Extract first name from full name."""
-    if not name:
-        return "user"
-    return name.split()[0].lower() if name.split() else "user"
+def _sanitize_part(part: str) -> str:
+    """Lowercase and keep only alphanumeric for a name part."""
+    return re.sub(r"[^a-z0-9]", "", part.lower()) if part else ""
 
 
-def generate_random_suffix(length: int = 8) -> str:
-    """Generate random alphanumeric string with special characters."""
-    # Use alphanumeric + some safe special characters
-    chars = string.ascii_lowercase + string.digits + "-_"
-    return "".join(secrets.choice(chars) for _ in range(length))
+def name_to_base(full_name: str | None) -> str:
+    """Convert full name to base slug: firstname_lastname.
+
+    - "Abhinav Bajaj" -> "abhinav_bajaj"
+    - "Mary Nasimova" -> "mary_nasimova"
+    - "Vineeta Bajaj" -> "vineeta_bajaj"
+    - Single word -> "word_user" so we have a valid base.
+    """
+    if not full_name or not full_name.strip():
+        return "user_user"
+    parts = full_name.strip().split()
+    first = _sanitize_part(parts[0]) if parts else "user"
+    last = _sanitize_part(parts[1]) if len(parts) > 1 else "user"
+    if not first:
+        first = "user"
+    if not last:
+        last = "user"
+    return f"{first}_{last}"
 
 
-def generate_unique_username(db: Session, first_name: str) -> str:
-    """Generate a unique username in format: firstname-random8chars."""
-    base_name = extract_first_name(first_name)
-    max_attempts = 100
-    
-    for _ in range(max_attempts):
-        suffix = generate_random_suffix(8)
-        username = f"{base_name}-{suffix}"
-        
-        # Check if username already exists
-        existing = db.execute(
-            select(User).where(User.username == username)
-        ).scalar_one_or_none()
-        
-        if not existing:
-            return username
-    
-    # Fallback: add timestamp if we can't find unique username
-    import time
-    timestamp = str(int(time.time()))[-6:]
-    return f"{base_name}-{timestamp}"
+def get_next_chronological_number(db: Session, base: str) -> int:
+    """Return the next chronological index N for this base (no conflicts).
+
+    Finds existing usernames matching base_N and returns max(N) + 1, or 1 if none.
+    """
+    import re
+    pattern = re.compile(r"^" + re.escape(base) + r"_(\d+)$")
+    rows = db.execute(select(User.username).where(User.username.isnot(None))).all()
+    max_n = 0
+    for (username,) in rows:
+        if not username:
+            continue
+        m = pattern.match(username)
+        if m:
+            max_n = max(max_n, int(m.group(1)))
+    return max_n + 1
+
+
+def generate_unique_username(db: Session, full_name: str) -> str:
+    """Generate a unique username: firstname_lastname_N.
+
+    N is assigned chronologically (first user with that first+last gets _1, etc.).
+    BE ensures no conflicts.
+    """
+    base = name_to_base(full_name)
+    n = get_next_chronological_number(db, base)
+    return f"{base}_{n}"

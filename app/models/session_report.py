@@ -27,6 +27,7 @@ class SessionReport(Base):
     half_focused_segments_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of { start_ts, end_ts, apps_display }
     cloud_ai_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    activity_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     user: Mapped["User"] = relationship("User", back_populates="reports")

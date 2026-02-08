@@ -14,7 +14,7 @@ from app.core.database import get_db
 from app.models.session_report import SessionReport
 from app.models.reaction import Reaction
 from app.models.user import User
-from app.api.reports import _to_out
+from app.api.reports import _to_out, _top_focus_app_from_segments
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/leaderboard", tags=["leaderboard"])
@@ -47,6 +47,7 @@ class LeaderboardEntry(BaseModel):
     is_own_report: bool  # Whether this report belongs to the current user
     reactions: dict[str, int]  # emoji -> count
     user_reaction: str | None  # emoji that current user reacted with, if any
+    top_focus_app: str | None = None  # Most used app during focused time
 
 
 class ReactRequest(BaseModel):
@@ -118,13 +119,13 @@ def get_leaderboard(
     db: Annotated[Session, Depends(get_db)],
     tz: str | None = Query(None, alias="timezone", description="IANA timezone e.g. America/New_York"),
 ):
-    """Get leaderboard of published reports, sorted by zone_in_score descending. Works without authentication."""
-    # Get all published reports with user info, ordered by zone_in_score descending
+    """Get leaderboard of published reports, sorted by focused_sec descending. Works without authentication."""
+    # Get all published reports with user info, ordered by focused time descending
     query = (
         select(SessionReport, User.name, User.email, User.username)
         .join(User, SessionReport.user_id == User.id)
         .where(SessionReport.published == True)
-        .order_by(SessionReport.zone_in_score.desc(), SessionReport.created_at.desc())
+        .order_by(SessionReport.focused_sec.desc(), SessionReport.created_at.desc())
     )
     
     results = db.execute(query).all()
@@ -162,6 +163,7 @@ def get_leaderboard(
                     break
         
         report_dict = _to_out(report, tz)
+        top_focus_app = _top_focus_app_from_segments(getattr(report, "half_focused_segments_json", None))
         entries.append(LeaderboardEntry(
             **report_dict,
             user_name=user_name,
@@ -170,6 +172,7 @@ def get_leaderboard(
             is_own_report=is_own_report,
             reactions=reaction_counts,
             user_reaction=user_reaction,
+            top_focus_app=top_focus_app,
         ))
     
     logger.info("GET /leaderboard -> %d entries", len(entries))
@@ -269,6 +272,7 @@ class LifetimeLeaderboardEntry(BaseModel):
     user_email: str | None
     username: str | None
     max_zone_in_score: float | None
+    total_focused_sec: float  # Sum of focused_sec across all reports (for ZoneIn Focus Minutes)
     is_own_profile: bool  # Whether this is the current user's profile
 
 
@@ -277,29 +281,37 @@ def get_lifetime_leaderboard(
     user_id: Annotated[UUID | None, Depends(get_optional_user_id)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    """Get leaderboard of users sorted by their lifetime maximum ZoneIn score. Works without authentication."""
-    # Get all users with max_zone_in_score, ordered by max_zone_in_score descending
+    """Get leaderboard of users sorted by total focused time (ZoneIn Focus Minutes). Uses stored total_focused_sec when set, else sum from reports."""
+    total_focused = (
+        select(SessionReport.user_id, func.sum(SessionReport.focused_sec).label("total_focused_sec"))
+        .group_by(SessionReport.user_id)
+    ).subquery()
     query = (
-        select(User)
-        .where(User.max_zone_in_score.isnot(None))
-        .order_by(User.max_zone_in_score.desc(), User.created_at.asc())
+        select(User, total_focused.c.total_focused_sec)
+        .join(total_focused, User.id == total_focused.c.user_id)
+        .order_by(
+            func.coalesce(User.total_focused_sec, total_focused.c.total_focused_sec).desc(),
+            User.created_at.asc(),
+        )
     )
-    
-    users = db.execute(query).scalars().all()
-    
-    # Build response
+    results = db.execute(query).all()
     entries = []
-    for user in users:
+    for user, sum_focused in results:
         is_own_profile = user_id is not None and user.id == user_id
-        
+        # Prefer stored total on user (updated on report create/update), fallback to sum from reports
+        total_sec = getattr(user, "total_focused_sec", None)
+        if total_sec is None:
+            total_sec = float(sum_focused or 0)
+        else:
+            total_sec = float(total_sec)
         entries.append(LifetimeLeaderboardEntry(
             user_id=str(user.id),
             user_name=user.name,
             user_email=user.email,
             username=user.username,
             max_zone_in_score=user.max_zone_in_score,
+            total_focused_sec=total_sec,
             is_own_profile=is_own_profile,
         ))
-    
     logger.info("GET /leaderboard/lifetime -> %d entries", len(entries))
     return entries

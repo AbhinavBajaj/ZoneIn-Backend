@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user_id, get_optional_user_id
@@ -60,8 +60,12 @@ class ReportOut(BaseModel):
     half_focused_segments_json: str | None = None
     cloud_ai_enabled: bool
     published: bool
+    activity_public: bool = False
     created_at: datetime
     is_own_report: bool = True
+    # When activity is redacted (non-owner, activity_public=False), only these are set:
+    timeline_public_json: str | None = None  # state-only timeline for bar
+    top_focus_app: str | None = None
 
 
 # Bundle ID / label for Chrome app (macOS); if this app event is followed by a browser event,
@@ -149,6 +153,18 @@ def _update_user_max_score(db: Session, user_id: UUID, new_score: float) -> None
             logger.info("Updated max_zone_in_score for user_id=%s: %s -> %s", user_id, old_score, new_score)
 
 
+def _update_user_total_focused(db: Session, user_id: UUID) -> None:
+    """Set user's total_focused_sec to the sum of focused_sec across all their reports."""
+    total = db.execute(
+        select(func.coalesce(func.sum(SessionReport.focused_sec), 0)).where(SessionReport.user_id == user_id)
+    ).scalar_one()
+    user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+    if user:
+        user.total_focused_sec = float(total)
+        db.commit()
+        logger.info("Updated total_focused_sec for user_id=%s: %s", user_id, total)
+
+
 def _to_out(r: SessionReport, tz_str: str | None = None) -> dict:
     """Convert report to output dict, optionally converting datetimes to local timezone."""
     started_at = r.started_at
@@ -190,8 +206,60 @@ def _to_out(r: SessionReport, tz_str: str | None = None) -> dict:
         "half_focused_segments_json": getattr(r, "half_focused_segments_json", None),
         "cloud_ai_enabled": r.cloud_ai_enabled,
         "published": getattr(r, "published", False),  # Backward compatibility
+        "activity_public": getattr(r, "activity_public", False),
         "created_at": created_at,
     }
+
+
+def _state_only_timeline(timeline_buckets_json: str | None) -> str | None:
+    """Strip timeline to only start_ts, end_ts, state for public bar (no app/label/url)."""
+    if not timeline_buckets_json or not timeline_buckets_json.strip():
+        return None
+    try:
+        events = json.loads(timeline_buckets_json)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(events, list):
+        return None
+    out = []
+    for o in events:
+        if not isinstance(o, dict) or "start_ts" not in o or "end_ts" not in o:
+            continue
+        out.append({
+            "start_ts": o["start_ts"],
+            "end_ts": o["end_ts"],
+            "state": o.get("state", "neutral"),
+        })
+    return json.dumps(out) if out else None
+
+
+def _top_focus_app_from_segments(half_focused_segments_json: str | None) -> str | None:
+    """Compute top focus app (most focused time) from half_focused_segments with state focused."""
+    if not half_focused_segments_json or not half_focused_segments_json.strip():
+        return None
+    try:
+        arr = json.loads(half_focused_segments_json)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(arr, list):
+        return None
+    total_by_app: dict[str, float] = {}
+    for o in arr:
+        if not isinstance(o, dict):
+            continue
+        state = o.get("state", "half_focused")
+        if state != "focused":
+            continue
+        start_ts = o.get("start_ts")
+        end_ts = o.get("end_ts")
+        apps_display = o.get("apps_display") or ""
+        if not isinstance(start_ts, (int, float)) or not isinstance(end_ts, (int, float)):
+            continue
+        dur = float(end_ts - start_ts)
+        total_by_app[apps_display] = total_by_app.get(apps_display, 0) + dur
+    if not total_by_app:
+        return None
+    return max(total_by_app, key=total_by_app.get)
 
 
 @router.post("", response_model=ReportOut)
@@ -241,8 +309,8 @@ def create_report(
         existing.cloud_ai_enabled = body.cloud_ai_enabled
         db.commit()
         db.refresh(existing)
-        # Update user's max_zone_in_score
         _update_user_max_score(db, user_id, body.zone_in_score)
+        _update_user_total_focused(db, user_id)
         out = _to_out(existing, tz)
         logger.info("Report updated: session_id=%s user_id=%s", body.session_id, user_id)
         logger.info("POST /reports upsert struct: %s", json.dumps(out, default=str))
@@ -267,8 +335,8 @@ def create_report(
     db.add(r)
     db.commit()
     db.refresh(r)
-    # Update user's max_zone_in_score
     _update_user_max_score(db, user_id, body.zone_in_score)
+    _update_user_total_focused(db, user_id)
     out = _to_out(r, tz)
     logger.info("Report created: session_id=%s user_id=%s id=%s", body.session_id, user_id, r.id)
     logger.info("POST /reports create struct: %s", json.dumps(out, default=str))
@@ -321,6 +389,10 @@ def list_reports(
     return out
 
 
+class ActivityPublicUpdate(BaseModel):
+    activity_public: bool
+
+
 @router.get("/{report_id}", response_model=ReportOut)
 def get_report(
     report_id: UUID,
@@ -336,4 +408,38 @@ def get_report(
         if user_id is None or r.user_id != user_id:
             raise HTTPException(status_code=404, detail="Report not found")
     is_own = user_id is not None and r.user_id == user_id
-    return ReportOut(**_to_out(r, tz), is_own_report=is_own)
+    activity_public = getattr(r, "activity_public", False)
+    out = _to_out(r, tz)
+    out["is_own_report"] = is_own
+    # Redact activity for non-owners when activity is not public
+    if not is_own and not activity_public:
+        out["timeline_public_json"] = _state_only_timeline(r.timeline_buckets_json)
+        out["top_focus_app"] = _top_focus_app_from_segments(r.half_focused_segments_json)
+        out["timeline_buckets_json"] = None
+        out["half_focused_segments_json"] = None
+    return ReportOut(**out)
+
+
+@router.patch("/{report_id}", response_model=ReportOut)
+def update_report_activity_public(
+    report_id: UUID,
+    body: ActivityPublicUpdate,
+    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    db: Annotated[Session, Depends(get_db)],
+    tz: str | None = Query(None, alias="timezone", description="IANA timezone e.g. America/New_York"),
+):
+    """Update activity_public (owner only)."""
+    r = db.execute(
+        select(SessionReport).where(
+            SessionReport.id == report_id,
+            SessionReport.user_id == user_id,
+        )
+    ).scalar_one_or_none()
+    if not r:
+        raise HTTPException(status_code=404, detail="Report not found")
+    r.activity_public = body.activity_public
+    db.commit()
+    db.refresh(r)
+    out = _to_out(r, tz)
+    out["is_own_report"] = True
+    return ReportOut(**out)
