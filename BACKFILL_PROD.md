@@ -1,3 +1,17 @@
+# Deploy (pull + migrate on prod)
+
+From your **local** machine after pushing:
+
+```bash
+cd ZoneIn-Backend
+git push origin main
+./deploy_pull_migrate.sh
+```
+
+That SSHs to **theloveguru**, runs `git pull` and `alembic upgrade head` in the backend repo (default path: `~/Documents/ZoneIn-Backend`). To use a different path: `./deploy_pull_migrate.sh '~/other/path/ZoneIn-Backend'`.
+
+---
+
 # Backfill production (total_focused_sec, etc.)
 
 Profile "Total time" and leaderboard use `users.total_focused_sec`. Backfill it for existing prod users so profiles and leaderboard show correct totals.
