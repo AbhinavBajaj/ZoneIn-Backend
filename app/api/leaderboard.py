@@ -284,6 +284,7 @@ class LifetimeLeaderboardEntry(BaseModel):
     user_name: str | None
     user_email: str | None
     username: str | None
+    avatar_url: str | None = None  # Profile picture URL (or default)
     max_zone_in_score: float | None
     total_focused_sec: float  # Sum of focused_sec across all reports (for ZoneIn Focus Minutes)
     is_own_profile: bool  # Whether this is the current user's profile
