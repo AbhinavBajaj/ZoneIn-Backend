@@ -11,7 +11,8 @@ from pydantic import BaseModel
 from app.core.config import settings
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_DAYS = 30
+# ~8 months so users stay logged in on the website for a long time
+ACCESS_TOKEN_EXPIRE_DAYS = 240
 Bearer = HTTPBearer(auto_error=False)
 
 
