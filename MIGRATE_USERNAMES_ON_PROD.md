@@ -2,10 +2,53 @@
 
 This updates prod user IDs from the old format (`abhinav-ecn4u5vi`, `mary-uxf47jxd`, `vineeta-5x_1r-4-`) to the new format (`abhinav_bajaj_1`, `mary_nasimova_1`, `vineeta_bajaj_1`).
 
+---
+
+## Quick “what to do”
+
+- **The Leadership Board with old names** is served by the app at **34.132.57.0:8000**. That app is connected to **one** database (prod). You need to run the migration **against that same database**.
+- **Your local `.env`** has `DATABASE_URL=postgresql://myuser:mypassword@localhost:5432/zonein` — that is your **local** DB. Migrating that only updates local, not the prod app.
+- So you have to run the migration **on the server 34.132.57.0** (or with a connection string that points to the **prod** DB). The prod DB URL is whatever the app on 34.132.57.0 uses (usually in `.env` on that server).
+
+**Steps:**
+
+1. **SSH into the prod server** (where the app at 34.132.57.0 runs):
+   ```bash
+   ssh YOUR_USER@34.132.57.0
+   ```
+   Use the same user/host you use to deploy (e.g. `ssh abhinav_bajaj2023@34.132.57.0` or from `~/.ssh/config`).
+
+2. **Go to the backend app directory on that server** (where `.env` and the code live):
+   ```bash
+   cd ~/ZoneIn-Backend
+   # or: cd /home/abhinav_bajaj2023/ZoneIn-Backend
+   # use: find /home -name "migrate_usernames_to_first_last_number.py" 2>/dev/null
+   ```
+
+3. **On that server, the `.env` is the prod one.** The script reads `DATABASE_URL` from `.env` automatically. Dry-run:
+   ```bash
+   python3 migrate_usernames_to_first_last_number.py --dry-run
+   ```
+   You should see the three users (abhinav, mary, vineeta) with old → new usernames.
+
+4. **Apply the migration:**
+   ```bash
+   python3 migrate_usernames_to_first_last_number.py
+   ```
+
+5. **Restart the backend** on that server so the app picks up the new data:
+   ```bash
+   sudo systemctl restart zonein-backend
+   # or: pkill -f uvicorn; cd ~/ZoneIn-Backend && uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+   ```
+
+If you don’t have SSH to 34.132.57.0, you need the **prod** `DATABASE_URL` from whoever manages that server (or from the host’s `.env`). Then from your laptop, with that URL in `.env` or `export DATABASE_URL="..."`, run the same script — only if your machine can reach the prod DB (direct or via tunnel).
+
+---
+
 ## Prerequisites
 
-- SSH access to the production server (or any machine that can reach the prod database)
-- Prod `DATABASE_URL` (PostgreSQL connection string)
+- SSH access to the production server (or the prod `DATABASE_URL` and network access to that DB).
 
 ## Option A: SSH into prod server and run migration there
 
@@ -13,41 +56,33 @@ This updates prod user IDs from the old format (`abhinav-ecn4u5vi`, `mary-uxf47j
 
 2. **SSH into the prod server:**
    ```bash
-   ssh your-user@your-prod-host
+   ssh your-user@34.132.57.0
    ```
 
-3. **Go to the app directory** (where ZoneIn-Backend is deployed):
+3. **Go to the app directory** (where ZoneIn-Backend is deployed and where `.env` lives):
    ```bash
-   cd /path/to/ZoneIn-Backend   # use your actual deploy path
+   cd ~/ZoneIn-Backend
    ```
 
-4. **Activate the app’s Python env** (if you use a venv/conda):
+4. **Activate the app’s Python env** (if you use a venv):
    ```bash
    source .venv/bin/activate
    # or: source venv/bin/activate
    ```
 
-5. **Ensure prod `DATABASE_URL` is set** (in `.env`, or export it):
-   ```bash
-   export DATABASE_URL="postgresql://user:password@host:5432/dbname"
-   ```
+5. **No need to set `DATABASE_URL` by hand** — the script uses the app’s config and loads `.env` from the current directory.
 
 6. **Dry run** (see what would change, no writes):
    ```bash
    python3 migrate_usernames_to_first_last_number.py --dry-run
    ```
-   You should see the three users listed with old → new usernames.
 
 7. **Apply the migration:**
    ```bash
    python3 migrate_usernames_to_first_last_number.py
    ```
 
-8. **Restart the backend** (if it’s a long-running process) so it uses the updated DB:
-   ```bash
-   sudo systemctl restart zonein-backend
-   # or however you restart the app
-   ```
+8. **Restart the backend** (see step 5 in “Quick what to do” above).
 
 ## Option B: Run migration from your laptop using prod DATABASE_URL
 

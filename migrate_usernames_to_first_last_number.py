@@ -5,10 +5,31 @@ chronological (first user with that first+last gets _1, etc.).
 
 Usage:
   python migrate_usernames_to_first_last_number.py [--dry-run]
+
+Loads .env from this script's directory so DATABASE_URL is taken from .env
+(and not from a stale value you may have exported in your shell).
 """
 import argparse
+import os
 import sys
+from pathlib import Path
 from collections import defaultdict
+
+# Load .env from the same directory as this script *before* importing app,
+# so we use the project's .env and not a stale DATABASE_URL from the shell.
+_env_file = Path(__file__).resolve().parent / ".env"
+if _env_file.exists():
+    with open(_env_file) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip().strip("'\"")
+                if key == "DATABASE_URL" and value:
+                    os.environ["DATABASE_URL"] = value
+                    break
+
 from sqlalchemy import select
 from app.core.database import SessionLocal
 from app.models.user import User
