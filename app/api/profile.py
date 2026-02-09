@@ -23,6 +23,7 @@ class PublicProfileResponse(BaseModel):
     max_zone_in_score: float | None
     top_focus_app: str | None = None  # From user's most recent report
     last_activity_at: datetime | None = None  # Last report ended_at (or published_at when published)
+    streak_count: int = 0
 
 
 @router.get("/profile/{username}", response_model=PublicProfileResponse)
@@ -57,4 +58,5 @@ def get_public_profile(
         max_zone_in_score=user.max_zone_in_score,
         top_focus_app=top_focus_app,
         last_activity_at=last_activity_at,
+        streak_count=getattr(user, "streak_count", 0) or 0,
     )

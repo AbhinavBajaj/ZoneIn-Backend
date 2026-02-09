@@ -1,7 +1,7 @@
 """User model (Google OAuth)."""
 import uuid
-from datetime import datetime
-from sqlalchemy import String, DateTime, UUID, Float
+from datetime import date, datetime
+from sqlalchemy import String, DateTime, Date, UUID, Float, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -18,6 +18,8 @@ class User(Base):
     avatar_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)  # Profile picture URL
     max_zone_in_score: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
     total_focused_sec: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)  # Sum of focused_sec across all reports
+    streak_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # Consecutive days with activity
+    last_activity_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # UTC date of last activity (report)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     reports: Mapped[list["SessionReport"]] = relationship("SessionReport", back_populates="user")

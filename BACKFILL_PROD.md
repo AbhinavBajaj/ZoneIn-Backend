@@ -60,4 +60,6 @@ set -a && source .env && set +a && python backfill_total_focused_sec.py
 
 - **backfill_total_focused_sec.py** – sets `users.total_focused_sec` from the sum of `session_reports.focused_sec` per user. Run this so "Total time" on profiles and the leaderboard is correct for all users.
 
+- **backfill_streak.py** – sets `users.streak_count = 1` and `users.last_activity_date` to the date of each user’s latest report (UTC). Run once after deploying the streak feature so existing users start with streak 1. Same options as above (run on server or locally with prod `DATABASE_URL`).
+
 Top Focus App and ZoneIn Last Activity are computed from the latest report at request time (no backfill needed).

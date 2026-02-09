@@ -165,6 +165,36 @@ def _update_user_total_focused(db: Session, user_id: UUID) -> None:
         logger.info("Updated total_focused_sec for user_id=%s: %s", user_id, total)
 
 
+def _update_user_streak(db: Session, user_id: UUID, activity_date: date) -> None:
+    """Update user's streak_count and last_activity_date. Activity = report created/updated on this date (UTC).
+    - If no previous activity or gap > 7 days: streak = 1.
+    - If activity_date == prev: no change.
+    - If activity_date == prev + 1 day: streak += 1.
+    - Else (gap 2-7 days): streak = 1.
+    """
+    user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+    if not user:
+        return
+    prev = getattr(user, "last_activity_date", None)
+    streak = getattr(user, "streak_count", 0) or 0
+
+    if prev is None:
+        streak = 1
+    elif activity_date == prev:
+        pass  # same day, keep streak
+    elif (activity_date - prev).days > 7:
+        streak = 1
+    elif (activity_date - prev).days == 1:
+        streak += 1
+    else:
+        streak = 1
+
+    user.streak_count = streak
+    user.last_activity_date = activity_date
+    db.commit()
+    logger.info("Updated streak for user_id=%s: activity_date=%s prev=%s -> streak=%s", user_id, activity_date, prev, streak)
+
+
 def _to_out(r: SessionReport, tz_str: str | None = None) -> dict:
     """Convert report to output dict, optionally converting datetimes to local timezone."""
     started_at = r.started_at
@@ -312,6 +342,8 @@ def create_report(
         db.refresh(existing)
         _update_user_max_score(db, user_id, body.zone_in_score)
         _update_user_total_focused(db, user_id)
+        activity_date = ended_at.date() if ended_at.tzinfo else ended_at.replace(tzinfo=timezone.utc).date()
+        _update_user_streak(db, user_id, activity_date)
         out = _to_out(existing, tz)
         logger.info("Report updated: session_id=%s user_id=%s", body.session_id, user_id)
         logger.info("POST /reports upsert struct: %s", json.dumps(out, default=str))
@@ -338,6 +370,8 @@ def create_report(
     db.refresh(r)
     _update_user_max_score(db, user_id, body.zone_in_score)
     _update_user_total_focused(db, user_id)
+    activity_date = ended_at.date() if ended_at.tzinfo else ended_at.replace(tzinfo=timezone.utc).date()
+    _update_user_streak(db, user_id, activity_date)
     out = _to_out(r, tz)
     logger.info("Report created: session_id=%s user_id=%s id=%s", body.session_id, user_id, r.id)
     logger.info("POST /reports create struct: %s", json.dumps(out, default=str))

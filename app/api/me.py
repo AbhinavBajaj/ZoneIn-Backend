@@ -46,7 +46,7 @@ def me(
 ):
     user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
     if not user:
-        return {"id": str(user_id), "email": None, "name": None, "username": None, "avatar_url": None, "total_focused_sec": None, "top_focus_app": None, "last_activity_at": None}
+        return {"id": str(user_id), "email": None, "name": None, "username": None, "avatar_url": None, "total_focused_sec": None, "top_focus_app": None, "last_activity_at": None, "streak_count": 0}
     top_focus_app, last_activity_at = _latest_report_info(db, user_id)
     return {
         "id": str(user.id),
@@ -57,6 +57,7 @@ def me(
         "total_focused_sec": getattr(user, "total_focused_sec", None),
         "top_focus_app": top_focus_app,
         "last_activity_at": last_activity_at.isoformat() if last_activity_at else None,
+        "streak_count": getattr(user, "streak_count", 0) or 0,
     }
 
 
